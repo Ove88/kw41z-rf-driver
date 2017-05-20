@@ -53,6 +53,9 @@
 *
 ************************************************************************************/
 
+/* Defined to remove all unneccessaty code */
+#define USING_MBED_NANOSTACK  1
+
 /* boolean types */
 typedef uint8_t   bool_t;
 

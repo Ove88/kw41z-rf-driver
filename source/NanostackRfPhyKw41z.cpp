@@ -164,17 +164,7 @@ int8_t rf_start_cca(uint8_t *data_ptr, uint16_t data_length, uint8_t tx_handle, 
         return -1;
     }
     else
-<<<<<<< HEAD:nanostack/TARGET_KW41Z/NanostackRfPhyKw41z.cpp
-    {
-        /* Check if transmitted data needs to be ACKed */
-        if (*data_ptr & 0x20)
-           ack_requested = 1;
-        else
-           ack_requested = 0;
-        
-=======
     {     
->>>>>>> 63fa4c09418e5fd928def55d16348f273c89d28f:kw41z-rf-driver/source/NanostackRfPhyKw41z.cpp
         current_tx_handle = tx_handle;
 
         /* Start CCA and TX process */
@@ -301,32 +291,13 @@ static int8_t rf_extension(phy_extension_type_e extension_type, uint8_t *data_pt
         /* Control MAC pending bit for Indirect data transmission */
         case PHY_EXTENSION_CTRL_PENDING_BIT:
 
-<<<<<<< HEAD:nanostack/TARGET_KW41Z/NanostackRfPhyKw41z.cpp
-
-        /* Manually set the frame pending bit of the next data request auto ACK */
-        if (*data_ptr) 
-        {
-            phy_pib_set_attribute(gPhyPibAckFramePending_c, 1);
-        }
-        else
-        {
-            phy_pib_set_attribute(gPhyPibAckFramePending_c, 0);
-        } 
-        break;
-=======
             phy_manual_set_ack_frame_pending(*data_ptr);
             break;
->>>>>>> 63fa4c09418e5fd928def55d16348f273c89d28f:kw41z-rf-driver/source/NanostackRfPhyKw41z.cpp
 
         /* Return frame pending status */
         case PHY_EXTENSION_READ_LAST_ACK_PENDING_STATUS:
 
-<<<<<<< HEAD:nanostack/TARGET_KW41Z/NanostackRfPhyKw41z.cpp
-            /* Check last received ACK for frame pending bit set */
-            *data_ptr = phy_get_pib_attribute(gPhyPibLastTxAckFP_c);
-=======
             *data_ptr = phy_check_last_recv_ack_frame_pending();
->>>>>>> 63fa4c09418e5fd928def55d16348f273c89d28f:kw41z-rf-driver/source/NanostackRfPhyKw41z.cpp
             break;
 
         /* Set channel, used for setting channel for energy scan */
@@ -817,11 +788,7 @@ static int8_t phy_cca_tx_request(uint8_t *data, uint8_t dataLength)
     msg.msgData.dataReq.txDuration = gPhyMaxFrameDuration_c; // ?? The computed duration for the Data Request frame
     msg.msgData.dataReq.slottedTx = gPhyUnslottedMode_c; /* One CCA operation is performed */
     msg.msgData.dataReq.CCABeforeTx = gPhyCCAMode1_c; /* One CCA operation is performed */
-<<<<<<< HEAD:nanostack/TARGET_KW41Z/NanostackRfPhyKw41z.cpp
-    msg.msgData.dataReq.ackRequired = (*data & 0x20) ? gPhyRxAckRqd_c : gPhyNoAckRqd_c;
-=======
     msg.msgData.dataReq.ackRequired = ack_requested ? gPhyRxAckRqd_c : gPhyNoAckRqd_c;
->>>>>>> 63fa4c09418e5fd928def55d16348f273c89d28f:kw41z-rf-driver/source/NanostackRfPhyKw41z.cpp
     msg.msgData.dataReq.psduLength = dataLength; 
     msg.msgData.dataReq.pPsdu = data;
 
@@ -944,21 +911,7 @@ phy_link_tx_status_e phy_tx_process_result(phyStatus_t phyResult)
     {
         case gPhySuccess_c:
             
-<<<<<<< HEAD:nanostack/TARGET_KW41Z/NanostackRfPhyKw41z.cpp
-            if (phy_get_pib_attribute(gPhyPibLastTxAckFP_c) > 0)
-            {
-                /* The received data was an ACK to an issued data request, and 
-                 * the data pending bit was set, indicating that data is available */
-=======
-            if (phy_check_last_recv_ack_frame_pending() > 0) 
-            {
-                /* The received ACK had the data pending bit set, 
-                 * indicating that data is available */
->>>>>>> 63fa4c09418e5fd928def55d16348f273c89d28f:kw41z-rf-driver/source/NanostackRfPhyKw41z.cpp
-
-                 txStatus = PHY_LINK_TX_DONE_PENDING; 
-            }
-            else if (ack_requested)
+            if (ack_requested)
             {
                 txStatus = PHY_LINK_TX_DONE;
             }
@@ -978,6 +931,14 @@ phy_link_tx_status_e phy_tx_process_result(phyStatus_t phyResult)
 
         case gPhyNoAck_c:
             txStatus = PHY_LINK_TX_FAIL;
+            break;
+
+        case gPhyFramePending_c:
+
+            /* The received ACK had the data pending bit set, 
+             * indicating that data is available at  */
+
+            txStatus = PHY_LINK_TX_DONE_PENDING; 
             break;
 
         default:

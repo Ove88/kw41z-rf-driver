@@ -95,8 +95,9 @@
 #endif
 
 /*! \cond DOXY_SKIP_TAG */
-#define Phy_BufferAlloc(size) MEM_BufferAllocWithId(size,gPhyPoolId,(void*)__get_LR())
-#define Phy_BufferAllocForever(size) MEM_BufferAllocForever(size,gPhyPoolId)
+#define Phy_BufferAlloc(size) ns_dyn_mem_temporary_alloc(size)
+#define Phy_BufferAllocForever(size) ns_dyn_mem_alloc(size)
+#define Phy_BufferFree(ptr) ns_dyn_mem_free(ptr)
 /*! \endcond */
 
 

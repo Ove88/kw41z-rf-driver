@@ -46,7 +46,7 @@
 
 #include "fsl_os_abstraction.h"
 #include "fsl_device_registers.h"
-#include "Flash_Adapter.h"
+//#include "Flash_Adapter.h"
 #include "system_MKW41Z4.h"
 
 /*! *********************************************************************************
@@ -63,9 +63,6 @@
 * Private functions prototype
 *************************************************************************************
 ********************************************************************************** */
-#if gPhyUseNeighborTable_d
-static int32_t PhyGetIndexOf( uint16_t checksum );
-#endif
 
 
 /*! *********************************************************************************
@@ -78,12 +75,8 @@ const  uint8_t gPhyActivePwrState = gPhyPwrIdle_c; /* Do not change! */
 static uint32_t mPhyDSMDuration = 0xFFFFF0;
 extern uint8_t mXcvrDisallowSleep;
 
-#if gPhyUseNeighborTable_d
-/* Limit HW indirect queue size to ~10% */
-const uint8_t gPhyIndirectQueueSize_c = gPhyHwIndQueueSize_d/10;
-#else
 const uint8_t gPhyIndirectQueueSize_c = gPhyHwIndQueueSize_d;
-#endif
+
 
 
 /*! *********************************************************************************
@@ -102,13 +95,10 @@ void
 )
 {
     uint32_t phyReg;
-#if gPhyUseNeighborTable_d
-    uint32_t i;
-#endif
 
-    XCVR_Init( ZIGBEE_MODE, DR_500KBPS );
+    XCVR_Init();
     
-    XCVR_SetXtalTrim( (uint8_t)gHardwareParameters.xtalTrim );
+    XCVR_SetXtalTrim( (uint8_t)gHardwareParameters.xtalTrim ); //TODO: Where do gHardwareParameters come from?
     
     /* Enable 16 bit mode for TC2 - TC2 prime EN, disable all timers,
        enable AUTOACK, mask all interrupts */
@@ -130,33 +120,9 @@ void
        disable all timer interrupts */
     ZLL->IRQSTS = ZLL->IRQSTS;
 
-    /* Enable Source Addresing Match module */
-    ZLL->SAM_CTRL |= ZLL_SAM_CTRL_SAP0_EN_MASK;
-#if (gMpmIncluded_d)
-    ZLL->SAM_CTRL &= ~ZLL_SAM_CTRL_SAP1_START_MASK;
-    ZLL->SAM_CTRL |= ZLL_SAM_CTRL_SAP1_EN_MASK | ZLL_SAM_CTRL_SAP1_START(gPhyHwIndQueueSize_d/2);
-#if gPhyUseNeighborTable_d
-    ZLL->SAM_CTRL &= ~(ZLL_SAM_CTRL_SAA0_START_MASK | ZLL_SAM_CTRL_SAA1_START_MASK);
-    ZLL->SAM_CTRL |= ZLL_SAM_CTRL_SAA0_EN_MASK | 
-                     ZLL_SAM_CTRL_SAA1_EN_MASK | 
-                     ZLL_SAM_CTRL_SAA0_START(gPhyIndirectQueueSize_c/2) |
-                     ZLL_SAM_CTRL_SAA1_START(gPhyHwIndQueueSize_d/2 + gPhyIndirectQueueSize_c/2);
-#endif
-
-#elif gPhyUseNeighborTable_d
-    ZLL->SAM_CTRL &= ~ZLL_SAM_CTRL_SAA0_START_MASK;
-    ZLL->SAM_CTRL |= ZLL_SAM_CTRL_SAA0_EN_MASK | ZLL_SAM_CTRL_SAA0_START(gPhyIndirectQueueSize_c);
-#endif
 
     /* Clear HW indirect queue */
     ZLL->SAM_TABLE |= ZLL_SAM_TABLE_INVALIDATE_ALL_MASK;
-#if gPhyUseNeighborTable_d
-    for( i=0; i<gPhyHwIndQueueSize_d; i++ )
-    {
-        /* Invalidate current index and checksum */
-        PhyPp_RemoveFromIndirect(i, 0);
-    }
-#endif
 
     /*  Frame Filtering
         FRM_VER[7:6] = b11. Accept FrameVersion 0 and 1 packets, reject all others */
@@ -517,10 +483,6 @@ void PhyPpSetSAMState
 {
     ZLL->SAM_CTRL &= ~ZLL_SAM_CTRL_SAP0_EN_MASK;
     ZLL->SAM_CTRL |= ZLL_SAM_CTRL_SAP0_EN(state);
-#if gMpmIncluded_d
-    ZLL->SAM_CTRL &= ~ZLL_SAM_CTRL_SAP1_EN_MASK;
-    ZLL->SAM_CTRL |= ZLL_SAM_CTRL_SAP1_EN(state);
-#endif
 }
 
 /*! *********************************************************************************
@@ -1047,39 +1009,6 @@ uint16_t PhyGetChecksum(uint8_t *pAddr, uint8_t addrMode, uint16_t PanId)
 ********************************************************************************** */
 uint8_t PhyAddToNeighborTable(uint8_t *pAddr, uint8_t addrMode, uint16_t PanId)
 {
-#if gPhyUseNeighborTable_d
-    int32_t index;
-    uint32_t phyReg;
-    uint16_t checksum = PhyGetChecksum(pAddr, addrMode, PanId);
-    uint32_t min = (ZLL->SAM_CTRL & ZLL_SAM_CTRL_SAA0_START_MASK) >> ZLL_SAM_CTRL_SAA0_START_SHIFT;
-    uint32_t max = gPhyHwIndQueueSize_d;
-
-    if( PhyGetIndexOf(checksum) != -1 )
-    {
-        /* Device is allready in the table */
-        return 0;
-    }
-
-    /* Find first free index */
-    phyReg = ZLL->SAM_TABLE;
-    phyReg &= ~(ZLL_SAM_TABLE_SAM_INDEX_WR_MASK  |
-                ZLL_SAM_TABLE_SAM_INDEX_INV_MASK |
-                ZLL_SAM_TABLE_SAM_INDEX_EN_MASK  |
-                ZLL_SAM_TABLE_FIND_FREE_IDX_MASK |
-                ZLL_SAM_TABLE_INVALIDATE_ALL_MASK );
-    
-    ZLL->SAM_TABLE = phyReg | ZLL_SAM_TABLE_FIND_FREE_IDX_MASK;
-    
-    while( ZLL->SAM_TABLE & ZLL_SAM_TABLE_SAM_BUSY_MASK );
-    
-    index = (ZLL->SAM_FREE_IDX & ZLL_SAM_FREE_IDX_SAA0_1ST_FREE_IDX_MASK) >> ZLL_SAM_FREE_IDX_SAA0_1ST_FREE_IDX_SHIFT;
-
-    if( (index >= min) && (index < max) )
-    {
-        PhyPp_IndirectQueueInsert((uint8_t)index, checksum, 0);
-        return 0;
-    }
-#endif
     return 1;
 }
 
@@ -1094,20 +1023,6 @@ uint8_t PhyAddToNeighborTable(uint8_t *pAddr, uint8_t addrMode, uint16_t PanId)
 ********************************************************************************** */
 uint8_t PhyRemoveFromNeighborTable(uint8_t *pAddr, uint8_t addrMode, uint16_t PanId)
 {
-#if gPhyUseNeighborTable_d
-    uint16_t checksum;
-    int32_t  index;
-
-    checksum = PhyGetChecksum(pAddr, addrMode, PanId);
-    index    = PhyGetIndexOf(checksum);
-    
-    if( index != -1 )
-    {
-        /* Invalidate current index and checksum */
-        PhyPp_RemoveFromIndirect(index,0);
-        return 0;
-    }
-#endif
     return 1;
 }
 
@@ -1122,57 +1037,8 @@ uint8_t PhyRemoveFromNeighborTable(uint8_t *pAddr, uint8_t addrMode, uint16_t Pa
 ********************************************************************************** */
 bool_t PhyCheckNeighborTable(uint16_t checksum)
 {
-#if gPhyUseNeighborTable_d
-    if( PhyGetIndexOf(checksum) != -1 )
-    {
-        return TRUE;
-    }
-#endif
     return FALSE;
 }
-
-/*! *********************************************************************************
-* \brief  This function returns the table index of the specified checksum.
-*
-* \param[in]  checksum     hash code generated by PhyGetChecksum()
-*
-* \return  The table index where the checksum was found or
-*          -1 if no entry was found with the specified chacksum
-*          
-*
-********************************************************************************** */
-#if gPhyUseNeighborTable_d
-static int32_t PhyGetIndexOf( uint16_t checksum )
-{
-    uint32_t i, phyReg;
-    uint32_t start = (ZLL->SAM_CTRL & ZLL_SAM_CTRL_SAA0_START_MASK) >> ZLL_SAM_CTRL_SAA0_START_SHIFT;
-    uint32_t stop = gPhyHwIndQueueSize_d;
-    
-    for(i=start; i<stop; i++)
-    {
-        /* Set the index value */
-        phyReg = ZLL->SAM_TABLE;
-        phyReg &= ~(ZLL_SAM_TABLE_SAM_INDEX_MASK     |
-                    ZLL_SAM_TABLE_SAM_INDEX_WR_MASK  |
-                    ZLL_SAM_TABLE_SAM_INDEX_INV_MASK |
-                    ZLL_SAM_TABLE_SAM_INDEX_EN_MASK  |
-                    ZLL_SAM_TABLE_FIND_FREE_IDX_MASK |
-                    ZLL_SAM_TABLE_INVALIDATE_ALL_MASK );
-        
-        ZLL->SAM_TABLE = phyReg | (i << ZLL_SAM_TABLE_SAM_INDEX_SHIFT);
-        /* Read checksum located at the specified index */
-        phyReg = ZLL->SAM_TABLE;
-        phyReg = (phyReg & ZLL_SAM_TABLE_SAM_CHECKSUM_MASK) >> ZLL_SAM_TABLE_SAM_CHECKSUM_SHIFT;
-
-        if( phyReg == checksum )
-        {
-            return i;
-        }
-    }
-    
-    return -1;
-}
-#endif
 
 /*! *********************************************************************************
 * \brief  Change the XCVR DSM duration

@@ -33,6 +33,9 @@
 
 #include "FunctionLib.h"
 
+#if USING_MBED_NANOSTACK
+#include "nsdynmemLIB.h"
+#endif
 #if gUseToolchainMemFunc_d
 #include <string.h>
 #endif
@@ -96,6 +99,7 @@ void FLib_MemCpy (void* pDst,
                   void* pSrc,
                   uint32_t cBytes)
 {
+    
 #if gFLib_CheckBufferOverflow_d && defined(MEM_TRACKING)
     (void)MEM_BufferCheck(pDst, cBytes);
 #endif
@@ -111,7 +115,42 @@ void FLib_MemCpy (void* pDst,
         cBytes--;
     }
 #endif
+#endif
 }
+
+
+/*! *********************************************************************************
+* \brief  This function resets all bytes in a specified buffer to a set value.
+*
+* \param[in,out]  pDst  Address of the buffer to set.
+*
+* \param[in]  value  Set value.
+*
+* \param[in]  cBytes Number of bytes to set in the buffer (maximum 255 bytes).
+*
+* \post
+*
+* \remarks
+*
+********************************************************************************** */
+void FLib_MemSet (void* pData,
+                  uint8_t value,
+                  uint32_t cBytes)
+{
+#if gFLib_CheckBufferOverflow_d && defined(MEM_TRACKING)
+    (void)MEM_BufferCheck(pData, cBytes);
+#endif
+#if gUseToolchainMemFunc_d
+    memset(pData, value, cBytes);
+#else
+    while (cBytes)
+    {
+        ((uint8_t* )pData)[--cBytes] = value;
+    }
+#endif
+}
+
+#if !USING_MBED_NANOSTACK
 
 /*! *********************************************************************************
 * \brief  This function copies the specified number of bytes from the
@@ -324,38 +363,6 @@ bool_t FLib_MemCmp (void* pData1,    /* IN: First memory block to compare */
 
 
 /*! *********************************************************************************
-* \brief  This function resets all bytes in a specified buffer to a set value.
-*
-* \param[in,out]  pDst  Address of the buffer to set.
-*
-* \param[in]  value  Set value.
-*
-* \param[in]  cBytes Number of bytes to set in the buffer (maximum 255 bytes).
-*
-* \post
-*
-* \remarks
-*
-********************************************************************************** */
-void FLib_MemSet (void* pData,
-                  uint8_t value,
-                  uint32_t cBytes)
-{
-#if gFLib_CheckBufferOverflow_d && defined(MEM_TRACKING)
-    (void)MEM_BufferCheck(pData, cBytes);
-#endif
-#if gUseToolchainMemFunc_d
-    memset(pData, value, cBytes);
-#else
-    while (cBytes)
-    {
-        ((uint8_t* )pData)[--cBytes] = value;
-    }
-#endif
-}
-
-
-/*! *********************************************************************************
 * \brief  This function copies a buffer,
 *         possibly into the same overlapping memory as it is taken from
 *
@@ -518,3 +525,5 @@ uint32_t FLib_StrLen(char *str)
     return len;
 #endif
 }
+
+#endif

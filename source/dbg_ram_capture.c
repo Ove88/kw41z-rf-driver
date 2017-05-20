@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015, Freescale Semiconductor, Inc.
- * All rights reserved.
+ * Copyright 2016-2017 NXP
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -34,7 +34,11 @@
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
-#define PKT_RAM_SIZE_16B_WORDS  (544)  /* Number of 16bit entries in each Packet RAM */
+#if RADIO_IS_GEN_3P0
+#define PKT_RAM_SIZE_16B_WORDS  (1152) /* Number of 16bit entries in each Packet RAM bank */
+#else
+#define PKT_RAM_SIZE_16B_WORDS  (544) /* Number of 16bit entries in each Packet RAM bank */
+#endif /* RADIO_IS_GEN_3P0 */
 #define SIGN_EXTND_12_16(x)     ((x) | (((x) & 0x800) ? 0xF000 : 0x0))
 #define SIGN_EXTND_5_8(x)       ((x) | (((x) & 0x10) ? 0xE0 : 0x0))
 
@@ -42,11 +46,9 @@
  * Prototypes
  ******************************************************************************/
 
-
 /*******************************************************************************
  * Variables
  ******************************************************************************/
-
 
 /*******************************************************************************
  * Code
@@ -65,10 +67,11 @@ dbgRamStatus_t dbg_ram_capture(uint8_t dbg_page, uint16_t buffer_sz_bytes, void 
     dbgRamStatus_t status = DBG_RAM_SUCCESS;
     uint32_t temp;
     volatile uint8_t *pkt_ram_ptr0, *pkt_ram_ptr1;
-        uint8_t * output_ptr;
+    uint8_t * output_ptr;
     uint16_t i;
 
-    /* Some external code must perform the RX warmup request after the dbg_ram_init() call. */
+    /* Some external code must perform the RX warmup request after the dbg_ram_init() call */
+
     if (result_buffer == NULL)
     {
         status = DBG_RAM_FAIL_NULL_POINTER;
@@ -88,24 +91,30 @@ dbgRamStatus_t dbg_ram_capture(uint8_t dbg_page, uint16_t buffer_sz_bytes, void 
                 case DBG_PAGE_RAWADCIQ:
                 case DBG_PAGE_DCESTIQ:
                     XCVR_MISC->PACKET_RAM_CTRL =  temp | XCVR_CTRL_PACKET_RAM_CTRL_DBG_PAGE(dbg_page);
+
                     while (!(XCVR_MISC->PACKET_RAM_CTRL & XCVR_CTRL_PACKET_RAM_CTRL_DBG_RAM_FULL(2)))
                     {
                         /* Waiting for PKT_RAM to fill, wait for PKT_RAM_1 full to ensure complete memory is filled. */
                     }   
                     /* Copy to output by bytes to avoid any access size problems in 16 bit packet RAM. */
                     output_ptr = result_buffer;
+#if !RADIO_IS_GEN_2P1
                     pkt_ram_ptr0 = (volatile uint8_t *)&(XCVR_PKT_RAM->PACKET_RAM_0[0]);
                     pkt_ram_ptr1 = (volatile uint8_t *)&(XCVR_PKT_RAM->PACKET_RAM_1[0]);
+#else
+                    pkt_ram_ptr0 = (volatile uint8_t *)&(XCVR_PKT_RAM->PACKET_RAM[0]);
+                    pkt_ram_ptr1 = (volatile uint8_t *)&(XCVR_PKT_RAM->PACKET_RAM[XCVR_PKT_RAM_PACKET_RAM_COUNT>>1]); /* Second packet RAM starts halfway through */
+#endif /* !RADIO_IS_GEN_2P1 */
                     /* For *IQ pages I and Q are stored alternately in packet ram 0 & 1 */
-                    for (i=0;i<buffer_sz_bytes/4;i++)
+                    for (i = 0; i < buffer_sz_bytes / 4; i++)
                     {
                         *output_ptr++ = *pkt_ram_ptr0++;
                         *output_ptr++ = *pkt_ram_ptr0++;
                         *output_ptr++ = *pkt_ram_ptr1++;
                         *output_ptr++ = *pkt_ram_ptr1++;
                     }
-                    
-                  break;
+
+                    break;
                 case DBG_PAGE_RXINPH:
                 case DBG_PAGE_DEMOD_HARD:
                 case DBG_PAGE_DEMOD_SOFT:
@@ -118,15 +127,18 @@ dbgRamStatus_t dbg_ram_capture(uint8_t dbg_page, uint16_t buffer_sz_bytes, void 
                     }   
                     /* Copy to output by bytes to avoid any access size problems in 16 bit packet RAM. */
                     output_ptr = result_buffer;
+#if !RADIO_IS_GEN_2P1
                     pkt_ram_ptr0 = (volatile uint8_t *)&(XCVR_PKT_RAM->PACKET_RAM_0[0]);
+#else
+                    pkt_ram_ptr0 = (volatile uint8_t *)&(XCVR_PKT_RAM->PACKET_RAM[0]);
+#endif /* !RADIO_IS_GEN_2P1 */
                     /* This is for non I/Q */
-                    for (i=0;i<buffer_sz_bytes;i++)
+                    for (i = 0; i < buffer_sz_bytes; i++)
                     {
                         *output_ptr = *pkt_ram_ptr0;
-                                               pkt_ram_ptr0++;
-                                                output_ptr++;
+                        pkt_ram_ptr0++;
+                        output_ptr++;
                     }
-                    
                     break;
                 case DBG_PAGE_IDLE:
                 default:    
@@ -136,14 +148,13 @@ dbgRamStatus_t dbg_ram_capture(uint8_t dbg_page, uint16_t buffer_sz_bytes, void 
         }
     }
 
-    XCVR_MISC->PACKET_RAM_CTRL &= ~XCVR_CTRL_PACKET_RAM_CTRL_DBG_PAGE_MASK;  /* Clear DBG_PAGE to terminate the acquisition */
+    XCVR_MISC->PACKET_RAM_CTRL &= ~XCVR_CTRL_PACKET_RAM_CTRL_DBG_PAGE_MASK; /* Clear DBG_PAGE to terminate the acquisition */
 
     /* Process the samples and copy to output pointer */
 
-    XCVR_MISC->PACKET_RAM_CTRL &= ~XCVR_CTRL_PACKET_RAM_CTRL_XCVR_RAM_ALLOW_MASK;  /* Make PKT RAM available to protocol blocks */
-    XCVR_RX_DIG->RX_DIG_CTRL &= ~XCVR_RX_DIG_RX_DIG_CTRL_RX_DMA_DTEST_EN_MASK;  /* Turns off clocking to DMA/DBG blocks */
+    XCVR_MISC->PACKET_RAM_CTRL &= ~XCVR_CTRL_PACKET_RAM_CTRL_XCVR_RAM_ALLOW_MASK; /* Make PKT RAM available to protocol blocks */
+    XCVR_RX_DIG->RX_DIG_CTRL &= ~XCVR_RX_DIG_RX_DIG_CTRL_RX_DMA_DTEST_EN_MASK; /* Turns off clocking to DMA/DBG blocks */
 
     return status;
 }
-
 

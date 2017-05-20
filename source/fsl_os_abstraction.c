@@ -3,7 +3,8 @@
 * All rights reserved.
 *
 * \file fsl_os_abstraction_bm.c
-* This is the source file for the OS Abstraction layer for MQXLite. 
+* This is the source file for the OS Abstraction layer
+* Modified to connect with the mbed os platform
 *
 * Redistribution and use in source and binary forms, with or without modification,
 * are permitted provided that the following conditions are met:

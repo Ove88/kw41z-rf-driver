@@ -50,19 +50,6 @@
 #include "AspInterface.h"
 #include "MpmInterface.h"
 
-#ifndef gMWS_Enabled_d
-#define gMWS_Enabled_d 0
-#endif
-
-#ifndef gMWS_UseCoexistence_d
-#define gMWS_UseCoexistence_d 0
-#endif
-
-#if (gMWS_Enabled_d) || (gMWS_UseCoexistence_d)
-#include "MWS.h"
-#include "fsl_xcvr.h"
-#include "gpio_pins.h"
-#endif
 
 /*! *********************************************************************************
 *************************************************************************************
@@ -86,7 +73,7 @@
 * Private prototypes
 *************************************************************************************
 ********************************************************************************** */
-static void Phy24Task(Phy_PhyLocalStruct_t *pPhyStruct);
+static void Phy24Task(Phy_PhyLocalStruct_t *pPhyStruct, macToPdDataMessage_t *pMsgIn );
 
 static phyStatus_t Phy_HandlePdDataReq( Phy_PhyLocalStruct_t *pPhyData, macToPdDataMessage_t * pMsg );
 
@@ -99,10 +86,6 @@ static void PD_SendMessage(Phy_PhyLocalStruct_t *pPhyStruct, phyMessageId_t msgT
 static void Phy_SendLatePD( uint32_t param );
 static void Phy_SendLatePLME( uint32_t param );
 
-#if (gMWS_Enabled_d) || (gMWS_UseCoexistence_d)
-static uint32_t MWS_802_15_4_Callback ( mwsEvents_t event );
-static uint32_t Phy_GetSeqDuration(phyMessageHeader_t * pMsg);
-#endif
 
 /*! *********************************************************************************
 *************************************************************************************
@@ -112,9 +95,6 @@ static uint32_t Phy_GetSeqDuration(phyMessageHeader_t * pMsg);
 Phy_PhyLocalStruct_t phyLocal;
 uint8_t mXcvrDisallowSleep = 0;
 const uint8_t gPhyPoolId = gPhyPoolId_d;
-#if gMWS_Enabled_d
-uint8_t mXcvrAcquired = 0;
-#endif
 
 
 /*! *********************************************************************************
@@ -135,21 +115,10 @@ void Phy_Init(void)
     MPM_Init();
 
     phyLocal.flags = gPhyFlagDeferTx_c;
-    phyLocal.rxParams.pRxData = NULL;
-    
-    /* Prepare input queues.*/
-    MSG_InitQueue( &phyLocal.macPhyInputQueue );
+    phyLocal.rxParams.pRxData = NULL;   
 
     PhyIsrPassRxParams( NULL );
     PhyPlmeSetPwrState( gPhyDefaultIdlePwrMode_c );
-#if gMWS_Enabled_d
-    MWS_Register(gMWS_802_15_4_c, MWS_802_15_4_Callback);
-#endif
-#if gMWS_UseCoexistence_d
-    MWS_CoexistenceInit(&gCoexistence_RfDeny, NULL, NULL);
-    XCVR_CoexistenceInit();
-    MWS_CoexistenceRegister(gMWS_802_15_4_c, MWS_802_15_4_Callback);
-#endif
 }
 
 /*! *********************************************************************************
@@ -190,151 +159,87 @@ void Phy_RegisterSapHandlers( PD_MAC_SapHandler_t pPD_MAC_SapHandler,
 * \param[in]  taskParam The instance of the PHY
 *
 ********************************************************************************** */
-static void Phy24Task(Phy_PhyLocalStruct_t *pPhyStruct)
+static void Phy24Task((Phy_PhyLocalStruct_t *pPhyStruct, macToPdDataMessage_t *pMsgIn)
 {
     uint8_t state;
-    phyMessageHeader_t * pMsgIn = NULL;
     phyStatus_t status;
 
-#if gMWS_Enabled_d
-    OSA_InterruptDisable();
-#else
     ProtectFromXcvrInterrupt();
-#endif
     
-    /* Handling messages from upper layer */
-    while( MSG_Pending(&pPhyStruct->macPhyInputQueue) )
+    status = gPhySuccess_c;
+    state = PhyGetSeqState();
+    
+    /* Check if PHY is busy */
+    if( (state != gIdle_c) && (state != gRX_c) )
     {
-        status = gPhySuccess_c;
-        state = PhyGetSeqState();
+        status = gPhyBusy_c;
+    }
+    else
+    {
+        pPhyStruct->currentMacInstance = pMsgIn->macInstance;
+    }
+    
+    if( gPhyBusy_c == status )
+    {
+        break;
+    }
+    
+    if( gRX_c == state )
+    {
+        state = gIdle_c;
+        PhyPlmeForceTrxOffRequest();
+    }
+
+    if( status == gPhySuccess_c )
+    {
+        pPhyStruct->flags &= ~(gPhyFlagIdleRx_c);
         
-        /* Check if PHY is busy */
-        if( (state != gIdle_c) && (state != gRX_c) )
+        switch( pMsgIn->msgType )
         {
-            status = gPhyBusy_c;
-        }
-        else
-        {
-            /* PHY doesn't free dynamic alocated messages! */
-            pMsgIn = MSG_DeQueue( &pPhyStruct->macPhyInputQueue );
-            pPhyStruct->currentMacInstance = pMsgIn->macInstance;
-        
-#if gMWS_Enabled_d
-            /* Dual Mode */
-            if( (Phy_GetSeqDuration(pMsgIn) + mPhyOverhead_d) <= (MWS_GetInactivityDuration(gMWS_802_15_4_c) / 16) )
-            {
-                if( !mXcvrAcquired )
-                {
-                    if( gMWS_Success_c == MWS_Acquire(gMWS_802_15_4_c, FALSE) )
-                    {
-                        mXcvrAcquired = 1;
-                    }
-                    else
-                    {
-                        status = gPhyBusy_c;
-                    }
-                }
-            }
-            else
-            {
-                status = gPhyBusy_c;
-                
-                if( mXcvrAcquired && (state == gIdle_c) )
-                {
-                    mXcvrAcquired = 0;
-                    MWS_Release(gMWS_802_15_4_c);
-                }
-            }
-            
-            if( gPhyBusy_c == status )
-            {
-                /* Failure! Try again later */
-                MSG_QueueHead( &pPhyStruct->macPhyInputQueue, pMsgIn );
-            }
-#endif
-        }
-        
-        if( gPhyBusy_c == status )
-        {
+        case gPdDataReq_c:
+            status = Phy_HandlePdDataReq( pPhyStruct, pMsgIn );
+            break;
+        case gPlmeCcaReq_c:
+            status = PhyPlmeCcaEdRequest(gPhyCCAMode1_c, gPhyContCcaDisabled);
+            break;
+        case gPlmeEdReq_c:
+            status = PhyPlmeCcaEdRequest(gPhyEnergyDetectMode_c, gPhyContCcaDisabled);
+            break;
+        default:
+            status = gPhyInvalidPrimitive_c;
             break;
         }
-        
-        if( gRX_c == state )
-        {
-            state = gIdle_c;
-            PhyPlmeForceTrxOffRequest();
-        }
-        
-#if gMpmIncluded_d
-        if( status == gPhySuccess_c )
-        {
-            status = MPM_PrepareForTx( pMsgIn->macInstance );
-        }
-#endif
-
-        if( status == gPhySuccess_c )
-        {
-            pPhyStruct->flags &= ~(gPhyFlagIdleRx_c);
-            
-            switch( pMsgIn->msgType )
-            {
-            case gPdDataReq_c:
-                status = Phy_HandlePdDataReq( pPhyStruct, (macToPdDataMessage_t *)pMsgIn );
-                break;
-            case gPlmeCcaReq_c:
-                status = PhyPlmeCcaEdRequest(gPhyCCAMode1_c, gPhyContCcaDisabled);
-                break;
-            case gPlmeEdReq_c:
-                status = PhyPlmeCcaEdRequest(gPhyEnergyDetectMode_c, gPhyContCcaDisabled);
-                break;
-            default:
-                status = gPhyInvalidPrimitive_c;
-                break;
-            }
-        }
-        
-        /* Check status */
-        if( gPhySuccess_c != status )
-        {
-            switch( pMsgIn->msgType )
-            {
-            case gPdDataReq_c:
-                PD_SendMessage(pPhyStruct, gPdDataCnf_c);
-                break;
-                /* Fallthorough */
-            case gPlmeCcaReq_c:
-                pPhyStruct->channelParams.channelStatus = gPhyChannelBusy_c;
-                PLME_SendMessage(pPhyStruct, gPlmeCcaCnf_c);
-                break;
-            case gPlmeEdReq_c:
-                pPhyStruct->channelParams.energyLeveldB = 0;
-                PLME_SendMessage(pPhyStruct, gPlmeEdCnf_c);
-                break;
-            default:
-                PLME_SendMessage(pPhyStruct, gPlmeTimeoutInd_c);
-                break;
-            }
-        }
-    }/* while( MSG_Pending(&pPhyStruct->macPhyInputQueue) ) */
+    }
     
-#if !gMWS_Enabled_d
+    /* Check status */
+    if( gPhySuccess_c != status )
+    {
+        switch( pMsgIn->msgType )
+        {
+        case gPdDataReq_c:
+            PD_SendMessage(pPhyStruct, gPdDataCnf_c);
+            break;
+            /* Fallthorough */
+        case gPlmeCcaReq_c:
+            pPhyStruct->channelParams.channelStatus = gPhyChannelBusy_c;
+            PLME_SendMessage(pPhyStruct, gPlmeCcaCnf_c);
+            break;
+        case gPlmeEdReq_c:
+            pPhyStruct->channelParams.energyLeveldB = 0;
+            PLME_SendMessage(pPhyStruct, gPlmeEdCnf_c);
+            break;
+        default:
+            PLME_SendMessage(pPhyStruct, gPlmeTimeoutInd_c);
+            break;
+        }
+    } 
     UnprotectFromXcvrInterrupt();
-#endif
     
     /* Check if PHY can enter Idle state */
     if( gIdle_c == PhyGetSeqState() )
     {
         Phy_EnterIdle( pPhyStruct );
     }
-
-#if gMWS_Enabled_d    
-    if(MWS_GetActiveProtocol() == gMWS_None_c)
-    {
-        MWS_SignalIdle(gMWS_802_15_4_c);
-    }
-    
-    OSA_InterruptEnable();
-#endif
 }
 
 /*! *********************************************************************************
@@ -358,19 +263,7 @@ phyStatus_t MAC_PD_SapHandler(macToPdDataMessage_t *pMsg, instanceId_t phyInstan
         result = gPhyInvalidParameter_c;
     }
     else
-    {
-#if gMpmIncluded_d
-        if( pMsg->msgType == gPdIndQueueInsertReq_c || pMsg->msgType == gPdIndQueueRemoveReq_c )
-        {
-            baseIndex = MPM_GetRegSet( MPM_GetPanIndex(pMsg->macInstance) );
-            baseIndex = 
-#if gPhyUseNeighborTable_d
-                baseIndex * (gPhyHwIndQueueSize_d/gMpmPhyPanRegSets_c) +
-#endif
-                    baseIndex * (gPhyIndirectQueueSize_c/gMpmPhyPanRegSets_c);
-        }
-#endif
-        
+    {       
         switch( pMsg->msgType )
         {
         case gPdIndQueueInsertReq_c:
@@ -385,8 +278,8 @@ phyStatus_t MAC_PD_SapHandler(macToPdDataMessage_t *pMsg, instanceId_t phyInstan
             break;
             
         case gPdDataReq_c:
-            MSG_Queue(&phyLocal.macPhyInputQueue, pMsg);
-            Phy24Task( &phyLocal );
+
+            Phy24Task(&phyLocal, pMsg);
             break;
             
         default:
@@ -412,11 +305,6 @@ phyStatus_t MAC_PLME_SapHandler(macToPlmeMessage_t * pMsg, instanceId_t phyInsta
     Phy_PhyLocalStruct_t *pPhyStruct = &phyLocal;
     phyStatus_t result = gPhySuccess_c;
     uint8_t phyRegSet = 0;
-#if gMpmIncluded_d
-    int32_t panIdx = MPM_GetPanIndex( pMsg->macInstance );
-
-    phyRegSet = MPM_GetRegSet( panIdx );
-#endif
 
     if( NULL == pMsg )
     {
@@ -428,30 +316,17 @@ phyStatus_t MAC_PLME_SapHandler(macToPlmeMessage_t * pMsg, instanceId_t phyInsta
         {
         case gPlmeEdReq_c:
         case gPlmeCcaReq_c:
-            MSG_Queue(&phyLocal.macPhyInputQueue, pMsg);
-            Phy24Task( &phyLocal );
+
+            Phy24Task( &phyLocal, pMsg);
             break;
             
         case gPlmeSetReq_c:
-#if gMpmIncluded_d
-            result = MPM_SetPIB(pMsg->msgData.setReq.PibAttribute,
-                                &pMsg->msgData.setReq.PibAttributeValue,
-                                panIdx );
-            if( !MPM_isPanActive(panIdx) )
-            {
-                break;
-            }
-#endif
+
             result = PhyPlmeSetPIBRequest(pMsg->msgData.setReq.PibAttribute, pMsg->msgData.setReq.PibAttributeValue, phyRegSet, phyInstance);
             break;
             
         case gPlmeGetReq_c:
-#if gMpmIncluded_d
-            if( gPhySuccess_c == MPM_GetPIB(pMsg->msgData.getReq.PibAttribute, pMsg->msgData.getReq.pPibAttributeValue, panIdx) )
-            {
-                break;
-            }
-#endif
+#
             result = PhyPlmeGetPIBRequest( pMsg->msgData.getReq.PibAttribute, pMsg->msgData.getReq.pPibAttributeValue, phyRegSet, phyInstance);
             break;
             
@@ -466,13 +341,7 @@ phyStatus_t MAC_PLME_SapHandler(macToPlmeMessage_t * pMsg, instanceId_t phyInsta
 
                 pMsg->msgData.setTRxStateReq.rxDuration += ((XCVR_TSM->END_OF_SEQ & XCVR_TSM_END_OF_SEQ_END_OF_RX_WU_MASK) >> XCVR_TSM_END_OF_SEQ_END_OF_RX_WU_SHIFT) >> 4; /* /16 */
                 
-#if gMWS_Enabled_d
-                if( (MWS_GetInactivityDuration(gMWS_802_15_4_c) / 16) < (pMsg->msgData.setTRxStateReq.rxDuration + mPhyOverhead_d) )
-                {
-                    result = gPhyBusy_c;
-                    break;
-                }
-#endif
+
                 if( PhyIsIdleRx(phyInstance) )
                 {
                     PhyPlmeForceTrxOffRequest();
@@ -485,14 +354,7 @@ phyStatus_t MAC_PLME_SapHandler(macToPlmeMessage_t * pMsg, instanceId_t phyInsta
                         break;
                     }
                 }
-#if gMpmIncluded_d
-                /* If another PAN has the RxOnWhenIdle PIB set, enable the DualPan Auto mode */
-                if( gPhySuccess_c != MPM_PrepareForRx( pMsg->macInstance ) )
-                {
-                    result = gPhyBusy_c;
-                    break;
-                }
-#endif
+
                 pPhyStruct->flags &= ~(gPhyFlagIdleRx_c);
                 
                 Phy_SetSequenceTiming(pMsg->msgData.setTRxStateReq.startTime,
@@ -505,18 +367,9 @@ phyStatus_t MAC_PLME_SapHandler(macToPlmeMessage_t * pMsg, instanceId_t phyInsta
             {
                 if (gPhyForceTRxOff_c == pMsg->msgData.setTRxStateReq.state)
                 {
-#if gMpmIncluded_d
-                    if( !MPM_isPanActive(panIdx) )
-                    {
-                        break;
-                    }
-#endif
+
                     pPhyStruct->flags &= ~(gPhyFlagIdleRx_c);
                     PhyPlmeForceTrxOffRequest();
-#if gMWS_Enabled_d
-                    mXcvrAcquired = 0;
-                    MWS_Release(gMWS_802_15_4_c);
-#endif
                 }
             }
             break;
@@ -640,62 +493,18 @@ void Phy_SetSequenceTiming(phyTime_t startTime, uint32_t seqDuration)
 ********************************************************************************** */
 static void Phy_EnterIdle( Phy_PhyLocalStruct_t *pPhyData )
 {
-    if( (pPhyData->flags & gPhyFlagRxOnWhenIdle_c)
-#if gMpmIncluded_d
-       /* Prepare the Active PAN/PANs */
-       && (gPhySuccess_c == MPM_PrepareForRx(gInvalidInstanceId_c))
-#endif
-      )
+    if( (pPhyData->flags & gPhyFlagRxOnWhenIdle_c))
     {
         uint32_t t = mPhyMaxIdleRxDuration_c;
-
-#if gMWS_Enabled_d
-        t = MWS_GetInactivityDuration(gMWS_802_15_4_c) / 16; /* convert to symbols */
-
-        if( t < (mPhyMinRxDuration_d + mPhyOverhead_d) )
-        {
-            pPhyData->flags &= ~(gPhyFlagIdleRx_c);
-            if( mXcvrAcquired )
-            {
-                mXcvrAcquired = 0;
-                MWS_Release(gMWS_802_15_4_c);
-            }
-        }
-        else 
-        {
-            if( t > (mPhyMaxIdleRxDuration_c + mPhyOverhead_d ) ) 
-            {
-                t = mPhyMaxIdleRxDuration_c;
-            }
-            else
-            {
-                t -= mPhyOverhead_d;
-            }
-            
-            if( !mXcvrAcquired )
-            {
-                mXcvrAcquired = (gMWS_Success_c == MWS_Acquire(gMWS_802_15_4_c, FALSE));
-            }
-        }
-
-        if( mXcvrAcquired )
-#endif
-        {
-            pPhyData->flags |= gPhyFlagIdleRx_c;
-            Phy_SetSequenceTiming( gPhySeqStartAsap_c, t );
-            PhyPlmeRxRequest( gPhyUnslottedMode_c, &pPhyData->rxParams );
-        }
+        
+        pPhyData->flags |= gPhyFlagIdleRx_c;
+        Phy_SetSequenceTiming( gPhySeqStartAsap_c, t );
+        PhyPlmeRxRequest( gPhyUnslottedMode_c, &pPhyData->rxParams );  
     }
     else
     {
         pPhyData->flags &= ~(gPhyFlagIdleRx_c);
-#if gMWS_Enabled_d
-        if( mXcvrAcquired )
-        {
-            mXcvrAcquired = 0;
-            MWS_Release(gMWS_802_15_4_c);
-        }
-#endif
+
         if( mXcvrDisallowSleep && (gIdle_c == PhyGetSeqState()) )
         {
             mXcvrDisallowSleep = 0;
@@ -726,30 +535,11 @@ void PhyPlmeSetFrameWaitTime( uint32_t maxTime, instanceId_t instanceId )
 void PhyPlmeSetRxOnWhenIdle( bool_t state, instanceId_t instanceId )
 {
     uint8_t radioState = PhyGetSeqState();
-#if gMpmIncluded_d
-    /* Check if at least one PAN has RxOnWhenIdle set */
-    if( FALSE == state )
-    {
-        uint32_t i;
-
-        for( i=0; i<gMpmMaxPANs_c; i++ )
-        {
-            MPM_GetPIB( gPhyPibRxOnWhenIdle, &state, i );
-            if( state )
-                break;
-        }
-    }
-#endif
 
     if( state )
     {
         phyLocal.flags |= gPhyFlagRxOnWhenIdle_c;
-#if gMpmIncluded_d
-        if( (radioState == gRX_c) && (phyLocal.flags & gPhyFlagIdleRx_c) )
-        {
-            PhyPlmeForceTrxOffRequest();
-        }
-#endif
+
     }
     else
     {
@@ -1041,6 +831,7 @@ static void PLME_SendMessage(Phy_PhyLocalStruct_t *pPhyStruct, phyMessageId_t ms
             }
             
             pPhyStruct->PLME_MAC_SapHandler(pMsg, pPhyStruct->currentMacInstance);
+            Phy_BufferFree(pMsg);
         }
     }
 }
@@ -1075,40 +866,8 @@ static void PD_SendMessage(Phy_PhyLocalStruct_t *pPhyStruct, phyMessageId_t msgT
             pMsg->msgData.dataInd.timeStamp       = PhyTime_GetTimestamp();      /* current timestamp (64bit) */
             temp = (uint32_t)(pMsg->msgData.dataInd.timeStamp & gPhyTimeMask_c); /* convert to 24bit */
             pMsg->msgData.dataInd.timeStamp -= (temp - pPhyStruct->rxParams.timeStamp) & gPhyTimeMask_c;
-#if !(gMpmIncluded_d)
+
             pPhyStruct->PD_MAC_SapHandler(pMsg, pPhyStruct->currentMacInstance);
-#else
-            {
-                uint32_t i, bitMask = PhyPpGetPanOfRxPacket();
-                
-                for( i=0; i<gMpmPhyPanRegSets_c; i++ )
-                {
-                    if( bitMask & (1 << i) )
-                    {
-                        bitMask &= ~(1 << i);
-                        pPhyStruct->currentMacInstance = MPM_GetMacInstanceFromRegSet(i);
-                        
-                        /* If the packet passed filtering on muliple PANs, send a copy to each one */
-                        if( bitMask )
-                        {
-                            pdDataToMacMessage_t *pDataIndCopy;
-                            
-                            pDataIndCopy = Phy_BufferAlloc(sizeof(pdDataToMacMessage_t) + len);
-                            if( pDataIndCopy )
-                            {
-                                FLib_MemCpy(pDataIndCopy, pMsg, sizeof(pdDataToMacMessage_t) + len);
-                                pPhyStruct->PD_MAC_SapHandler(pDataIndCopy, pPhyStruct->currentMacInstance);
-                            }
-                        }
-                        else
-                        {
-                            pPhyStruct->PD_MAC_SapHandler(pMsg, pPhyStruct->currentMacInstance);
-                            break;
-                        }
-                    }
-                }
-            }
-#endif
         }
         else
         {
@@ -1140,6 +899,7 @@ static void PD_SendMessage(Phy_PhyLocalStruct_t *pPhyStruct, phyMessageId_t msgT
                 pMsg->msgType = gPdDataCnf_c;
                 pMsg->msgData.dataCnf.status = status;
                 pPhyStruct->PD_MAC_SapHandler(pMsg, pPhyStruct->currentMacInstance);
+                Phy_BufferFree(pMsg);
             }
         }
     }
@@ -1158,112 +918,9 @@ static void Phy_SendLatePD( uint32_t param )
 
 void Radio_Phy_Notify(void)
 {
-    Phy24Task(&phyLocal);
-}
-
-#if (gMWS_Enabled_d) || (gMWS_UseCoexistence_d)
-/*! *********************************************************************************
-* \brief  This function represents the callback used by the MWS module to signal
-*         events to the 802.15.4 PHY
-*
-* \param[in]  event - the MWS event
-*
-* \return  status
-*
-********************************************************************************** */
-static uint32_t MWS_802_15_4_Callback ( mwsEvents_t event )
-{
-    uint32_t status = 0;
-    uint8_t xcvrState;
-
-    switch(event)
+    /* Check if PHY can enter Idle state */
+    if( gIdle_c == PhyGetSeqState() )
     {
-    case gMWS_Init_c:
-#if gMWS_Enabled_d
-        mXcvrAcquired = 0;
-#endif
-        break;
-
-    case gMWS_Active_c:
-        XCVR_ChangeMode(ZIGBEE_MODE, DR_500KBPS);
-        XCVR_MISC->BLE_ARB_CTRL |= XCVR_CTRL_BLE_ARB_CTRL_BLE_RELINQUISH_MASK;
-        break;
-
-    case gMWS_Idle_c:
-        Phy24Task(&phyLocal);
-        break;
-
-    case gMWS_Abort_c:
-#if gMWS_Enabled_d
-        mXcvrAcquired = 0;
-#endif
-        xcvrState = PhyGetSeqState();
-        PhyAbort();
-        switch(xcvrState)
-        {
-        case gCCA_c:
-            if( gCcaED_c == (ZLL->PHY_CTRL & ZLL_PHY_CTRL_CCATYPE_MASK) >> ZLL_PHY_CTRL_CCATYPE_SHIFT )
-            {
-                phyLocal.channelParams.energyLeveldB = (ZLL->LQI_AND_RSSI & ZLL_LQI_AND_RSSI_CCA1_ED_FNL_MASK) >> ZLL_LQI_AND_RSSI_CCA1_ED_FNL_SHIFT;
-                PLME_SendMessage(&phyLocal, gPlmeEdCnf_c);
-                break;
-            }
-        case gTX_c:
-        case gTR_c:
-            phyLocal.channelParams.channelStatus = gPhyChannelBusy_c;
-            PLME_SendMessage(&phyLocal, gPlmeCcaCnf_c);
-            break;
-        case gRX_c:
-            break;
-        default:
-            PLME_SendMessage(&phyLocal, gPlmeTimeoutInd_c);
-            break;
-        }
-        break;
-
-    case gMWS_GetInactivityDuration_c:
-        /* Default status is 0 (Busy)  */
-        if( gIdle_c == PhyGetSeqState() )
-        {
-            status = 0xFFFFFFFF;
-        }
-        break;
-
-    default:
-        status = gMWS_InvalidParameter_c;
-        break;
+        Phy_EnterIdle( phyLocal );
     }
-
-    return status;
 }
-
-/*! *********************************************************************************
-* \brief  This function returns the duration of the PHY request in symbols
-*
-* \param[in]  pMsg Pointer to the PHY request message
-*
-* \return  seq duration in symbols
-*
-********************************************************************************** */
-static uint32_t Phy_GetSeqDuration(phyMessageHeader_t * pMsg)
-{
-    uint32_t duration;
-    
-    /* Compute the duration of the sequence */
-    switch( pMsg->msgType )
-    {
-    case gPdDataReq_c:
-        duration = ((macToPdDataMessage_t *)pMsg)->msgData.dataReq.txDuration;
-        break;
-    case gPlmeCcaReq_c:
-    case gPlmeEdReq_c:
-        duration = gCCATime_c + gPhyTurnaroundTime_c;
-        break;
-    default:
-        duration = 0;
-    }
-    
-    return duration;
-}
-
-#endif

@@ -44,14 +44,6 @@
 #include "fsl_os_abstraction.h"
 #include "fsl_device_registers.h"
 
-#ifndef gMWS_UseCoexistence_d
-#define gMWS_UseCoexistence_d 0
-#endif
-
-#if gMWS_UseCoexistence_d
-#include "MWS.h"
-#endif
-
 
 /*! *********************************************************************************
 *************************************************************************************
@@ -180,13 +172,7 @@ phyStatus_t PhyPdDataRequest( pdDataReq_t *pTxPacket,
         ZLL->PHY_CTRL |= xcvseq;
         /* Unmask SEQ interrupt */
         ZLL->PHY_CTRL &= ~ZLL_PHY_CTRL_SEQMSK_MASK;
-#if gMWS_UseCoexistence_d
-        if(gMWS_Success_c != MWS_CoexistenceRequestAccess(gMWS_TxState_c))
-        {
-            PhyAbort();
-            status = gPhyBusy_c;
-        }
-#endif
+
         if( (status == gPhySuccess_c) && !mXcvrDisallowSleep )
         {
             mXcvrDisallowSleep = 1;
@@ -276,13 +262,7 @@ phyStatus_t PhyPlmeRxRequest( phySlottedMode_t phyRxMode, phyRxParams_t *  pRxPa
             ZLL->PHY_CTRL |= gRX_c ;
             /* unmask SEQ interrupt */
             ZLL->PHY_CTRL &= ~ZLL_PHY_CTRL_SEQMSK_MASK;
-#if gMWS_UseCoexistence_d
-            if(gMWS_Success_c != MWS_CoexistenceRequestAccess(gMWS_RxState_c))
-            {
-                PhyAbort();
-                status = gPhyBusy_c;
-            }
-#endif
+
             if( (status == gPhySuccess_c) && !mXcvrDisallowSleep )
             {
                 mXcvrDisallowSleep = 1;
@@ -356,13 +336,7 @@ phyStatus_t PhyPlmeCcaEdRequest( phyCCAType_t ccaParam, phyContCCAMode_t cccaMod
         }
         /* At the end of the scheduled sequence, an interrupt will occur:
         CCA , SEQ or TMR3 */
-#if gMWS_UseCoexistence_d
-        if(gMWS_Success_c != MWS_CoexistenceRequestAccess(gMWS_RxState_c))
-        {
-            PhyAbort();
-            status = gPhyBusy_c;
-        }
-#endif
+
         if( (status == gPhySuccess_c) && !mXcvrDisallowSleep )
         {
             mXcvrDisallowSleep = 1;
@@ -470,12 +444,7 @@ phyStatus_t PhyPlmeSetPwrLevelRequest
         {
             pwrStep = gPhyChannelTxPowerLimits[ZLL->CHANNEL_NUM0 - 11];
         }
-#if gMpmIncluded_d
-        if( pwrStep > gPhyChannelTxPowerLimits[ZLL->CHANNEL_NUM1 - 11] )
-        {
-            pwrStep = gPhyChannelTxPowerLimits[ZLL->CHANNEL_NUM1 - 11];
-        }
-#endif
+
         if( pwrStep > 2 )
         {
             pwrStep = (pwrStep << 1) - 2;

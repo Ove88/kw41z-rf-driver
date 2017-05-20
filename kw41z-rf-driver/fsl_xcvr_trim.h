@@ -1,6 +1,5 @@
 /*
-* Copyright (c) 2016, Freescale Semiconductor, Inc.
-* All rights reserved.
+* Copyright 2016-2017 NXP
 *
 * Redistribution and use in source and binary forms, with or without modification,
 * are permitted provided that the following conditions are met:
@@ -46,7 +45,6 @@
 *************************************************************************************
 ************************************************************************************/
 
-
 /************************************************************************************
 *************************************************************************************
 * Public type definitions
@@ -56,14 +54,14 @@
 /* \brief  The enumerations used to define the I & Q channel selections. */
 typedef enum
 {
-    I_CHANNEL  = 0,
+    I_CHANNEL = 0,
     Q_CHANNEL = 1,
     NUM_I_Q_CHAN = 2
 } IQ_t;
 
-typedef enum    /* Enumeration of ADC_GAIN_CAL 2 */
+typedef enum /* Enumeration of ADC_GAIN_CAL 2 */
 {
-    NOMINAL2  = 0,
+    NOMINAL2 = 0,
     BBF_NEG = 1,
     BBF_POS = 2,
     TZA_STEP_N0 = 3,
@@ -88,7 +86,7 @@ typedef enum    /* Enumeration of ADC_GAIN_CAL 2 */
     TZA_STEP_P8 = 22,
     TZA_STEP_P9 = 23,
     TZA_STEP_P10 = 24,
-    
+
     NUM_SWEEP_STEP_ENTRIES2 = 25 /* Including the baseline entry #0. */
 } DAC_SWEEP_STEP2_t;
 
@@ -97,16 +95,15 @@ typedef struct
 {
     uint16_t dcoc_step; 
     uint16_t dcoc_step_rcp; 
-    /*    uint16_t dcoc_step_q;  */
-    /*    uint16_t dcoc_step_rcp_q; */
+//    uint16_t dcoc_step_q;
+//    uint16_t dcoc_step_rcp_q;
 } TZAdcocstep_t;
-
 
 typedef struct
 {
-    int8_t step_value;  /* The offset from nominal DAC value (see sweep_step_values[]) */
-    int16_t internal_measurement;  /* The value (average code) measured from DMA samples. */
-    /* uint8_t valid; */     /* Set to TRUE (non zero) when a value is written to this table entry. */
+    int8_t step_value; /* The offset from nominal DAC value (see sweep_step_values[]) */
+    int16_t internal_measurement; /* The value (average code) measured from DMA samples. */
+//    uint8_t valid; /* Set to TRUE (non zero) when a value is written to this table entry. */
 } GAIN_CALC_TBL_ENTRY2_T;
 
 /*******************************************************************************
@@ -116,6 +113,9 @@ void rx_dc_sample_average(int16_t * i_avg, int16_t * q_avg);
 void rx_dc_sample_average_long(int16_t * i_avg, int16_t * q_avg);
 uint8_t rx_bba_dcoc_dac_trim_shortIQ(void);
 void XcvrCalDelay(uint32_t time);
+void rx_dc_est_average(int16_t * i_avg, int16_t * q_avg, uint16_t SampleNumber);
+uint8_t rx_bba_dcoc_dac_trim_DCest(void);
+void DCOC_DAC_INIT_Cal(uint8_t standalone_operation);
 
 
 
@@ -129,6 +129,4 @@ void XcvrCalDelay(uint32_t time);
 /*! @}*/
 
 #endif /* _FSL_XCVR_TRIM_H_ */
-
-
 

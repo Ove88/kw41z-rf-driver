@@ -35,9 +35,6 @@
 #include "fsl_device_registers.h"
 #include "fsl_xcvr_trim.h"
 
-#if gMWS_UseCoexistence_d
-#include "MWS.h"
-#endif /* gMWS_UseCoexistence_d */
 /*!
  * @addtogroup xcvr
  * @{
@@ -633,7 +630,7 @@ extern "C" {
  * @param data_rate The data rate for which the XCVR should be configured. Only matters when GFSK/MSK radio_mode is selected.
  * @note This function encompasses the ::XCVRGetDefafultConfig() and ::XCVR_Configure() functions.
  */
-xcvrStatus_t XCVR_Init(radio_mode_t radio_mode, data_rate_t data_rate);
+xcvrStatus_t XCVR_Init();
 
 
 /*!
