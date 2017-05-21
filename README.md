@@ -4,3 +4,4 @@ This RF driver uses the existing Rf drivers provided by NXP, along with a wrappe
 Unnecessary code has been left out, to keep it as small as possible.
 
 Under development!
+noteToSelf: Add fsl_rng.c 
