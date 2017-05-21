@@ -70,14 +70,6 @@ typedef struct PHY_Config {
   uint16_t frameWaitTime;
 } PHY_Config_t;
 
-typedef enum {
-    STATE_SLEEP,
-   // STATE_IDLE,
-    STATE_TX,
-    STATE_RX,
-    STATE_CALIBRATION
-} radio_state_t;
-
 typedef struct {
     plmeEdCnf_t recvCnf;
     bool        newCnf;
@@ -87,7 +79,6 @@ static uint8_t ack_requested;
 static uint8_t current_tx_handle;
 static int8_t current_channel = -1;
 
-static radio_state_t radio_state = STATE_SLEEP;
 static const instanceId_t mac_instance_id = 0, phy_instance_id = 1;
 static edConf_t lastEdCnf;
 
@@ -156,26 +147,13 @@ phyStatus_t     phy_data_msg_sap_handler( pdDataToMacMessage_t *pMsg, instanceId
  */
 int8_t rf_start_cca(uint8_t *data_ptr, uint16_t data_length, uint8_t tx_handle, data_protocol_e data_protocol)
 {
-  
-    /* Check if transmitter is busy */
-    if (radio_state != STATE_RX)
-    {
-        /* Return busy */
-        return -1;
-    }
-    else
-    {     
-        current_tx_handle = tx_handle;
+    int8_t retVal;
+    current_tx_handle = tx_handle;
 
-        /* Start CCA and TX process */
-        phy_cca_tx_request(data_ptr, data_length);
-        
-        /* Update current radio state */
-        radio_state = STATE_TX;
-    }
+    /* Start CCA and TX process */
+    retVal = phy_cca_tx_request(data_ptr, data_length);
 
-    /*Return success*/
-    return 0;
+    return retVal;
 }
 
 /*
@@ -211,9 +189,8 @@ static int8_t rf_interface_state_control(phy_interface_state_e new_state, uint8_
            
             phy_force_idle_state();
             
-             /* Set radio in low power mode */
-            PhyPlmeSetPwrState(gPhyPwrDSM_c);
-            radio_state = STATE_SLEEP;
+             /* Set radio in idle mode */
+            PhyPlmeSetPwrState(gPhyPwrIdle_c);
             
             break;
 
@@ -228,7 +205,6 @@ static int8_t rf_interface_state_control(phy_interface_state_e new_state, uint8_
             {
                 /* Set radio in low power mode */
                 PhyPlmeSetPwrState(gPhyPwrDSM_c);
-                radio_state = STATE_SLEEP;
             } 
            
             break;
@@ -247,12 +223,7 @@ static int8_t rf_interface_state_control(phy_interface_state_e new_state, uint8_
             phy_set_promiscuous_mode(false);
            
             retVal = phy_request_rx_state(); 
-            
-            if (retVal == 0) 
-            {
-                radio_state = STATE_RX;                
-            }
-            
+
             break;
 
         /* Enable Sniffer state */
@@ -261,11 +232,7 @@ static int8_t rf_interface_state_control(phy_interface_state_e new_state, uint8_
             phy_check_and_set_channel(rf_channel);
             phy_set_promiscuous_mode(true);
             retVal = phy_request_rx_state();
-            
-            if (retVal == 0) 
-            {
-                radio_state = STATE_RX;                
-            }
+
             break;
     }
 
@@ -772,11 +739,13 @@ static void phy_register_callbacks()
  *
  * \param none
  *
- * \return none
+ * \return  0 Success
+ *         -1 Busy/Failure
  */
 static int8_t phy_cca_tx_request(uint8_t *data, uint8_t dataLength)
 {
     macToPdDataMessage_t msg;
+    phyStatus_t status;
 
     /* Check if transmitted data needs to be ACKed */
     (*data & 0x20) ? ack_requested = 1 : ack_requested = 0;
@@ -793,9 +762,9 @@ static int8_t phy_cca_tx_request(uint8_t *data, uint8_t dataLength)
     msg.msgData.dataReq.pPsdu = data;
 
     /* Request to transfer message */
-    MAC_PD_SapHandler(&msg, phy_instance_id);
+    status = MAC_PD_SapHandler(&msg, phy_instance_id);
     
-    return 0;
+    return result == gPhySuccess_c ? 0 : -1;
 }
 
 
@@ -985,7 +954,6 @@ phyStatus_t phy_data_msg_sap_handler(
             1,                                                      /* CCA retries */
             1                                                       /* TX retries */
         );
-        radio_state = STATE_RX; /* Receiver is back in default state */
     }
 
     return gPhySuccess_c;
@@ -1012,8 +980,8 @@ phyStatus_t phy_management_message_sap_handler(
         /* Channel energy measurement confirmation message */
         case gPlmeEdCnf_c:
         
-            lastEdCnf.recvCnf = pMsg->msgData.edCnf;   /* Update local last received energy measurement */
-            lastEdCnf.newCnf = true;        /* Signal that new measurement is available */
+            lastEdCnf.recvCnf = pMsg->msgData.edCnf;    /* Update local last received energy measurement */
+            lastEdCnf.newCnf = true;                    /* Signal that new measurement is available */
             break;
 
         default:

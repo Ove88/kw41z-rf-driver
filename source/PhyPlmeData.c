@@ -173,11 +173,11 @@ phyStatus_t PhyPdDataRequest( pdDataReq_t *pTxPacket,
         /* Unmask SEQ interrupt */
         ZLL->PHY_CTRL &= ~ZLL_PHY_CTRL_SEQMSK_MASK;
 
-        if( (status == gPhySuccess_c) && !mXcvrDisallowSleep )
-        {
-            mXcvrDisallowSleep = 1;
-            PWR_DisallowXcvrToSleep();
-        }
+        // if( (status == gPhySuccess_c) && !mXcvrDisallowSleep )
+        // {
+        //     mXcvrDisallowSleep = 1;
+        //     PWR_DisallowXcvrToSleep();
+        // }
     }
 
     return status;
@@ -263,11 +263,11 @@ phyStatus_t PhyPlmeRxRequest( phySlottedMode_t phyRxMode, phyRxParams_t *  pRxPa
             /* unmask SEQ interrupt */
             ZLL->PHY_CTRL &= ~ZLL_PHY_CTRL_SEQMSK_MASK;
 
-            if( (status == gPhySuccess_c) && !mXcvrDisallowSleep )
-            {
-                mXcvrDisallowSleep = 1;
-                PWR_DisallowXcvrToSleep();
-            }
+            // if( (status == gPhySuccess_c) && !mXcvrDisallowSleep )
+            // {
+            //     mXcvrDisallowSleep = 1;
+            //     PWR_DisallowXcvrToSleep();
+            // }
         }
     }
 
@@ -337,11 +337,11 @@ phyStatus_t PhyPlmeCcaEdRequest( phyCCAType_t ccaParam, phyContCCAMode_t cccaMod
         /* At the end of the scheduled sequence, an interrupt will occur:
         CCA , SEQ or TMR3 */
 
-        if( (status == gPhySuccess_c) && !mXcvrDisallowSleep )
-        {
-            mXcvrDisallowSleep = 1;
-            PWR_DisallowXcvrToSleep();
-        }
+        // if( (status == gPhySuccess_c) && !mXcvrDisallowSleep )
+        // {
+        //     mXcvrDisallowSleep = 1;
+        //     PWR_DisallowXcvrToSleep();
+        // }
     }
 
     return status;

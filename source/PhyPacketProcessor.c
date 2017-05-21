@@ -98,7 +98,7 @@ void
 
     XCVR_Init();
     
-    XCVR_SetXtalTrim( (uint8_t)gHardwareParameters.xtalTrim ); //TODO: Where do gHardwareParameters come from?
+    //XCVR_SetXtalTrim( (uint8_t)gHardwareParameters.xtalTrim ); //TODO: Where do gHardwareParameters come from?
     
     /* Enable 16 bit mode for TC2 - TC2 prime EN, disable all timers,
        enable AUTOACK, mask all interrupts */
@@ -209,11 +209,11 @@ void
 
     PhyIsrPassRxParams(NULL);
 
-    if( mXcvrDisallowSleep )
-    {
-        mXcvrDisallowSleep = 0;
-        PWR_AllowXcvrToSleep();
-    }
+    // if( mXcvrDisallowSleep )
+    // {
+    //     mXcvrDisallowSleep = 0;
+    //     PWR_AllowXcvrToSleep();
+    // }
 
     //UnprotectFromXcvrInterrupt();
     OSA_InterruptEnable();

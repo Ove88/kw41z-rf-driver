@@ -73,7 +73,7 @@
 * Private prototypes
 *************************************************************************************
 ********************************************************************************** */
-static void Phy24Task(Phy_PhyLocalStruct_t *pPhyStruct, macToPdDataMessage_t *pMsgIn );
+static phyStatus_t Phy24Task(Phy_PhyLocalStruct_t *pPhyStruct, macToPdDataMessage_t *pMsgIn );
 
 static phyStatus_t Phy_HandlePdDataReq( Phy_PhyLocalStruct_t *pPhyData, macToPdDataMessage_t * pMsg );
 
@@ -93,7 +93,7 @@ static void Phy_SendLatePLME( uint32_t param );
 *************************************************************************************
 ********************************************************************************** */
 Phy_PhyLocalStruct_t phyLocal;
-uint8_t mXcvrDisallowSleep = 0;
+//uint8_t mXcvrDisallowSleep = 0;
 const uint8_t gPhyPoolId = gPhyPoolId_d;
 
 
@@ -111,8 +111,6 @@ void Phy_Init(void)
 {
     PhyHwInit();
     PhyTime_TimerInit(NULL);
-    ASP_Init( 0 );
-    MPM_Init();
 
     phyLocal.flags = gPhyFlagDeferTx_c;
     phyLocal.rxParams.pRxData = NULL;   
@@ -159,7 +157,7 @@ void Phy_RegisterSapHandlers( PD_MAC_SapHandler_t pPD_MAC_SapHandler,
 * \param[in]  taskParam The instance of the PHY
 *
 ********************************************************************************** */
-static void Phy24Task((Phy_PhyLocalStruct_t *pPhyStruct, macToPdDataMessage_t *pMsgIn)
+static phyStatus_t Phy24Task((Phy_PhyLocalStruct_t *pPhyStruct, macToPdDataMessage_t *pMsgIn)
 {
     uint8_t state;
     phyStatus_t status;
@@ -240,6 +238,8 @@ static void Phy24Task((Phy_PhyLocalStruct_t *pPhyStruct, macToPdDataMessage_t *p
     {
         Phy_EnterIdle( pPhyStruct );
     }
+    
+    return status;
 }
 
 /*! *********************************************************************************
@@ -279,7 +279,7 @@ phyStatus_t MAC_PD_SapHandler(macToPdDataMessage_t *pMsg, instanceId_t phyInstan
             
         case gPdDataReq_c:
 
-            Phy24Task(&phyLocal, pMsg);
+            result = Phy24Task(&phyLocal, pMsg);
             break;
             
         default:
@@ -505,11 +505,11 @@ static void Phy_EnterIdle( Phy_PhyLocalStruct_t *pPhyData )
     {
         pPhyData->flags &= ~(gPhyFlagIdleRx_c);
 
-        if( mXcvrDisallowSleep && (gIdle_c == PhyGetSeqState()) )
-        {
-            mXcvrDisallowSleep = 0;
-            PWR_AllowXcvrToSleep();
-        }
+        // if( mXcvrDisallowSleep && (gIdle_c == PhyGetSeqState()) )
+        // {
+        //     mXcvrDisallowSleep = 0;
+        //     PWR_AllowXcvrToSleep();
+        // }
     }
 }
 
