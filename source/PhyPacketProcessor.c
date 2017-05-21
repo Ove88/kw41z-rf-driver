@@ -37,7 +37,6 @@
 *************************************************************************************
 ********************************************************************************** */
 #include "EmbeddedTypes.h"
-#include "MpmInterface.h"
 #include "FunctionLib.h"
 
 #include "Phy.h"
@@ -46,7 +45,6 @@
 
 #include "fsl_os_abstraction.h"
 #include "fsl_device_registers.h"
-//#include "Flash_Adapter.h"
 #include "system_MKW41Z4.h"
 
 /*! *********************************************************************************

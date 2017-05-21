@@ -145,7 +145,7 @@ typedef struct Phy_PhyLocalStruct_tag
 {
     PD_MAC_SapHandler_t         PD_MAC_SapHandler;
     PLME_MAC_SapHandler_t       PLME_MAC_SapHandler;
-    msgQueue_t                  macPhyInputQueue;
+    /*msgQueue_t                  macPhyInputQueue;*/
     uint32_t                    maxFrameWaitTime;
     phyTxParams_t               txParams;
     phyRxParams_t               rxParams;

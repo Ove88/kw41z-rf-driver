@@ -366,7 +366,7 @@ static int8_t rf_device_register(void)
     /* Set pointer to MAC address */
     device_driver.PHY_MAC = mac_address;
     /* Set driver Name */
-    device_driver.driver_description = "KW41Z_Phy";
+    device_driver.driver_description =  (char*)"KW41Z_Phy";
 
     /*Type of RF PHY is 2.4 GHz*/
     device_driver.link_type = PHY_LINK_15_4_2_4GHZ_TYPE;
@@ -764,7 +764,7 @@ static int8_t phy_cca_tx_request(uint8_t *data, uint8_t dataLength)
     /* Request to transfer message */
     status = MAC_PD_SapHandler(&msg, phy_instance_id);
     
-    return result == gPhySuccess_c ? 0 : -1;
+    return status == gPhySuccess_c ? 0 : -1;
 }
 
 

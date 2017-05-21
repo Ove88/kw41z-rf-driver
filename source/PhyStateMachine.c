@@ -43,13 +43,7 @@
 
 #include "PhyInterface.h"
 #include "Phy.h"
-#include "MemManager.h"
-#include "Messaging.h"
 #include "FunctionLib.h"
-
-#include "AspInterface.h"
-#include "MpmInterface.h"
-
 
 /*! *********************************************************************************
 *************************************************************************************
@@ -157,7 +151,7 @@ void Phy_RegisterSapHandlers( PD_MAC_SapHandler_t pPD_MAC_SapHandler,
 * \param[in]  taskParam The instance of the PHY
 *
 ********************************************************************************** */
-static phyStatus_t Phy24Task((Phy_PhyLocalStruct_t *pPhyStruct, macToPdDataMessage_t *pMsgIn)
+static phyStatus_t Phy24Task(Phy_PhyLocalStruct_t *pPhyStruct, macToPdDataMessage_t *pMsgIn)
 {
     uint8_t state;
     phyStatus_t status;
@@ -179,7 +173,7 @@ static phyStatus_t Phy24Task((Phy_PhyLocalStruct_t *pPhyStruct, macToPdDataMessa
     
     if( gPhyBusy_c == status )
     {
-        break;
+       return;
     }
     
     if( gRX_c == state )
@@ -921,6 +915,6 @@ void Radio_Phy_Notify(void)
     /* Check if PHY can enter Idle state */
     if( gIdle_c == PhyGetSeqState() )
     {
-        Phy_EnterIdle( phyLocal );
+        Phy_EnterIdle( &phyLocal );
     }
 }

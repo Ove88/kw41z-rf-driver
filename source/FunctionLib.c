@@ -115,7 +115,6 @@ void FLib_MemCpy (void* pDst,
         cBytes--;
     }
 #endif
-#endif
 }
 
 
