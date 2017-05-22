@@ -57,7 +57,7 @@
  *END**************************************************************************/
 void OSA_InterruptEnable(void)
 {
-    core_util_critical_section_enter();
+    core_util_critical_section_exit();
 } 
 /*FUNCTION**********************************************************************
  *
@@ -67,7 +67,7 @@ void OSA_InterruptEnable(void)
  *END**************************************************************************/
 void OSA_InterruptDisable(void)
 {
-    core_util_critical_section_exit();
+    core_util_critical_section_enter();
 }
 
 /*FUNCTION**********************************************************************

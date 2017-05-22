@@ -320,7 +320,7 @@ phyStatus_t MAC_PLME_SapHandler(macToPlmeMessage_t * pMsg, instanceId_t phyInsta
             break;
             
         case gPlmeGetReq_c:
-#
+
             result = PhyPlmeGetPIBRequest( pMsg->msgData.getReq.PibAttribute, pMsg->msgData.getReq.pPibAttributeValue, phyRegSet, phyInstance);
             break;
             

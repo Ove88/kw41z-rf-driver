@@ -43,7 +43,7 @@
 ********************************************************************************** */
 
 #ifndef gUseToolchainMemFunc_d
-#define gUseToolchainMemFunc_d 0
+#define gUseToolchainMemFunc_d 1
 #endif
 
 #ifndef gFLib_CheckBufferOverflow_d

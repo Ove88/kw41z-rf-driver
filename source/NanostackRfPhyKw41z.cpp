@@ -574,13 +574,13 @@ static int8_t phy_set_promiscuous_mode(bool set)
 static int8_t phy_set_mac_address_match(uint8_t *address)
 {
     uint64_t mac = 0;
+
     for (int byte = 0; byte < 8; byte++)
     {
-        mac |= address[byte] << (8 - 1 - byte);
+        mac |= (uint64_t)address[byte] << (8 * (7 - byte));
     }
 
-    return phy_set_pib_attribute(gPhyPibLongAddress_c, mac);
-  
+    return phy_set_pib_attribute(gPhyPibLongAddress_c, mac);  
 }
 
 /*
@@ -814,7 +814,7 @@ static int8_t phy_force_idle_state()
 static int8_t phy_trx_state_request(phyState_t state)
 {
     macToPlmeMessage_t msg;
-    phyStatus_t result;
+    phyStatus_t result = gPhySuccess_c;
 
     msg.macInstance = mac_instance_id;
     msg.msgType = gPlmeSetTRxStateReq_c;
@@ -824,7 +824,7 @@ static int8_t phy_trx_state_request(phyState_t state)
     msg.msgData.setTRxStateReq.startTime = gPhySeqStartAsap_c;
     msg.msgData.setTRxStateReq.rxDuration = gPhyMaxFrameDuration_c; /* ?? If the requested state is Rx, then Rx will be enabled for rxDuration symbols.*/
 
-    result = MAC_PLME_SapHandler(&msg, phy_instance_id);
+    /*result = */MAC_PLME_SapHandler(&msg, phy_instance_id);
 
     return result == gPhySuccess_c ? 0 : -1;
 }
