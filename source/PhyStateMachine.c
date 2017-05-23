@@ -788,20 +788,20 @@ void Radio_Phy_UnexpectedTransceiverReset(instanceId_t instanceId)
 ********************************************************************************** */
 static void PLME_SendMessage(Phy_PhyLocalStruct_t *pPhyStruct, phyMessageId_t msgType)
 {
-    plmeToMacMessage_t * pMsg;
+    static plmeToMacMessage_t * pMsg;
     
     if( pPhyStruct->PLME_MAC_SapHandler )
     {
-        pMsg = Phy_BufferAlloc(sizeof(plmeToMacMessage_t));
-        
+          
         if(NULL == pMsg)
         {
-            phyTimeEvent_t ev;
+            pMsg = Phy_BufferAllocForever(sizeof(plmeToMacMessage_t));
+            // phyTimeEvent_t ev;
             
-            ev.parameter = (uint32_t)msgType;
-            ev.callback = Phy_SendLatePLME;
-            ev.timestamp = gPhyRxRetryInterval_c + PhyTime_GetTimestamp();
-            PhyTime_ScheduleEvent(&ev);
+            // ev.parameter = (uint32_t)msgType;
+            // ev.callback = Phy_SendLatePLME;
+            // ev.timestamp = gPhyRxRetryInterval_c + PhyTime_GetTimestamp();
+            // PhyTime_ScheduleEvent(&ev);
         }
         else
         {
@@ -825,7 +825,7 @@ static void PLME_SendMessage(Phy_PhyLocalStruct_t *pPhyStruct, phyMessageId_t ms
             }
             
             pPhyStruct->PLME_MAC_SapHandler(pMsg, pPhyStruct->currentMacInstance);
-            Phy_BufferFree(pMsg);
+            //Phy_BufferFree(pMsg);
         }
     }
 }
@@ -839,7 +839,7 @@ static void PLME_SendMessage(Phy_PhyLocalStruct_t *pPhyStruct, phyMessageId_t ms
 ********************************************************************************** */
 static void PD_SendMessage(Phy_PhyLocalStruct_t *pPhyStruct, phyMessageId_t msgType)
 {
-    pdDataToMacMessage_t *pMsg;
+    static pdDataToMacMessage_t *pMsg;
     
     if( pPhyStruct->PD_MAC_SapHandler )
     {
@@ -877,23 +877,25 @@ static void PD_SendMessage(Phy_PhyLocalStruct_t *pPhyStruct, phyMessageId_t msgT
                 status = gPhySuccess_c;
             }
             
-            pMsg = Phy_BufferAlloc(sizeof(phyMessageHeader_t) + sizeof(pdDataCnf_t));
+           
             
             if(NULL == pMsg)
             {
-                phyTimeEvent_t ev;
                 
-                ev.callback = Phy_SendLatePD;
-                ev.parameter = (uint32_t)msgType;
-                ev.timestamp = gPhyRxRetryInterval_c + PhyTime_GetTimestamp();
-                PhyTime_ScheduleEvent(&ev);
+                pMsg = Phy_BufferAllocForever(sizeof(phyMessageHeader_t) + sizeof(pdDataCnf_t));
+                // phyTimeEvent_t ev;
+                
+                // ev.callback = Phy_SendLatePD;
+                // ev.parameter = (uint32_t)msgType;
+                // ev.timestamp = gPhyRxRetryInterval_c + PhyTime_GetTimestamp();
+                // PhyTime_ScheduleEvent(&ev);
             }
             else
             {
                 pMsg->msgType = gPdDataCnf_c;
                 pMsg->msgData.dataCnf.status = status;
                 pPhyStruct->PD_MAC_SapHandler(pMsg, pPhyStruct->currentMacInstance);
-                Phy_BufferFree(pMsg);
+                //Phy_BufferFree(pMsg);
             }
         }
     }

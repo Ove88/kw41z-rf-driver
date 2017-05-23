@@ -56,7 +56,7 @@
 
 /* The interval at which the Phy will poll for a new buffer in order to start the RX */
 #ifndef gPhyRxRetryInterval_c
-#define gPhyRxRetryInterval_c         (60) /* [symbols] */
+#define gPhyRxRetryInterval_c         (0) //(60) /* [symbols] */
 #endif
 
 #ifndef gPhyUseNeighborTable_d
