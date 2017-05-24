@@ -788,45 +788,37 @@ void Radio_Phy_UnexpectedTransceiverReset(instanceId_t instanceId)
 ********************************************************************************** */
 static void PLME_SendMessage(Phy_PhyLocalStruct_t *pPhyStruct, phyMessageId_t msgType)
 {
-    static plmeToMacMessage_t * pMsg;
+    static plmeToMacMessage_t  staticMsg;
+    plmeToMacMessage_t * pMsg = &staticMsg;
     
     if( pPhyStruct->PLME_MAC_SapHandler )
     {
           
         if(NULL == pMsg)
         {
-            pMsg = Phy_BufferAllocForever(sizeof(plmeToMacMessage_t));
-            // phyTimeEvent_t ev;
-            
-            // ev.parameter = (uint32_t)msgType;
-            // ev.callback = Phy_SendLatePLME;
-            // ev.timestamp = gPhyRxRetryInterval_c + PhyTime_GetTimestamp();
-            // PhyTime_ScheduleEvent(&ev);
+            pMsg = (plmeToMacMessage_t *)Phy_BufferAllocForever(sizeof(plmeToMacMessage_t));
         }
-        else
+              
+        pMsg->msgType = msgType;
+        
+        switch(msgType)
         {
-            pMsg->msgType = msgType;
+        case gPlmeCcaCnf_c:
+            pMsg->msgData.ccaCnf.status = pPhyStruct->channelParams.channelStatus;
+            break;
             
-            switch(msgType)
-            {
-            case gPlmeCcaCnf_c:
-                pMsg->msgData.ccaCnf.status = pPhyStruct->channelParams.channelStatus;
-                break;
-                
-            case gPlmeEdCnf_c:
-                pMsg->msgData.edCnf.status        = gPhySuccess_c;
-                pMsg->msgData.edCnf.energyLeveldB = pPhyStruct->channelParams.energyLeveldB;
-                pMsg->msgData.edCnf.energyLevel   = Phy_GetEnergyLevel(pPhyStruct->channelParams.energyLeveldB);
-                break;
-                
-            default:
-                /* No aditional info needs to be filled */
-                break;
-            }
+        case gPlmeEdCnf_c:
+            pMsg->msgData.edCnf.status        = gPhySuccess_c;
+            pMsg->msgData.edCnf.energyLeveldB = pPhyStruct->channelParams.energyLeveldB;
+            pMsg->msgData.edCnf.energyLevel   = Phy_GetEnergyLevel(pPhyStruct->channelParams.energyLeveldB);
+            break;
+            
+        default:
+            /* No aditional info needs to be filled */
+            break;
+        }
             
             pPhyStruct->PLME_MAC_SapHandler(pMsg, pPhyStruct->currentMacInstance);
-            //Phy_BufferFree(pMsg);
-        }
     }
 }
 
@@ -839,8 +831,8 @@ static void PLME_SendMessage(Phy_PhyLocalStruct_t *pPhyStruct, phyMessageId_t ms
 ********************************************************************************** */
 static void PD_SendMessage(Phy_PhyLocalStruct_t *pPhyStruct, phyMessageId_t msgType)
 {
-    static pdDataToMacMessage_t *pMsg;
-    
+    static pdDataToMacMessage_t  staticMsg;
+    pdDataToMacMessage_t *pMsg;
     if( pPhyStruct->PD_MAC_SapHandler )
     {
         if( msgType == gPdDataInd_c )
@@ -849,7 +841,7 @@ static void PD_SendMessage(Phy_PhyLocalStruct_t *pPhyStruct, phyMessageId_t msgT
             uint16_t len = pPhyStruct->rxParams.psduLength - 2; /* Excluding FCS (2 bytes) */
             
             pMsg = pPhyStruct->rxParams.pRxData;
-            pPhyStruct->rxParams.pRxData = NULL;
+            //pPhyStruct->rxParams.pRxData = NULL;
             
             FLib_MemCpy((uint8_t *)(pMsg->msgData.dataInd.pPsdu), (void*)ZLL->PKT_BUFFER_RX, len);
             
@@ -866,6 +858,7 @@ static void PD_SendMessage(Phy_PhyLocalStruct_t *pPhyStruct, phyMessageId_t msgT
         else
         {
             phyStatus_t status;
+            pMsg = &staticMsg;
             
             if( (pPhyStruct->flags & gPhyFlagRxFP_c) == gPhyFlagRxFP_c )
             {
@@ -877,26 +870,15 @@ static void PD_SendMessage(Phy_PhyLocalStruct_t *pPhyStruct, phyMessageId_t msgT
                 status = gPhySuccess_c;
             }
             
-           
-            
+                       
             if(NULL == pMsg)
-            {
-                
-                pMsg = Phy_BufferAllocForever(sizeof(phyMessageHeader_t) + sizeof(pdDataCnf_t));
-                // phyTimeEvent_t ev;
-                
-                // ev.callback = Phy_SendLatePD;
-                // ev.parameter = (uint32_t)msgType;
-                // ev.timestamp = gPhyRxRetryInterval_c + PhyTime_GetTimestamp();
-                // PhyTime_ScheduleEvent(&ev);
+            {                
+                pMsg = (pdDataToMacMessage_t *)Phy_BufferAllocForever(sizeof(phyMessageHeader_t) + sizeof(pdDataCnf_t));
             }
-            else
-            {
-                pMsg->msgType = gPdDataCnf_c;
-                pMsg->msgData.dataCnf.status = status;
-                pPhyStruct->PD_MAC_SapHandler(pMsg, pPhyStruct->currentMacInstance);
-                //Phy_BufferFree(pMsg);
-            }
+                      
+            pMsg->msgType = gPdDataCnf_c;
+            pMsg->msgData.dataCnf.status = status;
+            pPhyStruct->PD_MAC_SapHandler(pMsg, pPhyStruct->currentMacInstance);
         }
     }
 }

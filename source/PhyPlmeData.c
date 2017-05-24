@@ -59,10 +59,6 @@
 *************************************************************************************
 ********************************************************************************** */
 extern Phy_PhyLocalStruct_t     phyLocal;
-extern uint8_t mXcvrDisallowSleep;
-#if gPhyRxRetryInterval_c
-uint8_t gRxRetryTimer = gInvalidTimerId_c;
-#endif
 
 uint8_t gPhyChannelTxPowerLimits[] = gChannelTxPowerLimit_c;
 
@@ -72,10 +68,6 @@ uint8_t gPhyChannelTxPowerLimits[] = gChannelTxPowerLimit_c;
 * Private prototypes
 *************************************************************************************
 ********************************************************************************** */
-#if gPhyRxRetryInterval_c
-static void PhyRxRetry( uint32_t param );
-#endif
-
 
 /*! *********************************************************************************
 *************************************************************************************
@@ -216,59 +208,36 @@ phyStatus_t PhyPlmeRxRequest( phySlottedMode_t phyRxMode, phyRxParams_t *  pRxPa
         
         if( NULL == pRxParams->pRxData )
         {
-            pRxParams->pRxData = Phy_BufferAllocForever(sizeof(pdDataToMacMessage_t) + gMaxPHYPacketSize_c);
+            pRxParams->pRxData = (pdDataToMacMessage_t *)Phy_BufferAllocForever(sizeof(pdDataToMacMessage_t) + gMaxPHYPacketSize_c);
         }
         
-        if( NULL == pRxParams->pRxData )
+        
+        PhyIsrPassRxParams(pRxParams);
+        
+        pRxParams->pRxData->msgData.dataInd.pPsdu = 
+            (uint8_t*)&pRxParams->pRxData->msgData.dataInd.pPsdu +
+                sizeof(pRxParams->pRxData->msgData.dataInd.pPsdu);
+        
+        /* Slotted operation */
+        if(gPhySlottedMode_c == phyRxMode)
         {
-#if gPhyRxRetryInterval_c
-            if( gRxRetryTimer == gInvalidTimerId_c )
-            {
-                phyTimeEvent_t event;
-
-                event.timestamp = PhyTime_GetTimestamp() + gPhyRxRetryInterval_c;
-                event.parameter = 0;
-                event.callback  = PhyRxRetry;
-                gRxRetryTimer = PhyTime_ScheduleEvent( &event );
-            }
-#endif
-            status = gPhyTRxOff_c;   
+            ZLL->PHY_CTRL |= ZLL_PHY_CTRL_SLOTTED_MASK;
         }
         else
         {
-            PhyIsrPassRxParams(pRxParams);
-            
-            pRxParams->pRxData->msgData.dataInd.pPsdu = 
-                (uint8_t*)&pRxParams->pRxData->msgData.dataInd.pPsdu +
-                    sizeof(pRxParams->pRxData->msgData.dataInd.pPsdu);
-            
-            /* Slotted operation */
-            if(gPhySlottedMode_c == phyRxMode)
-            {
-                ZLL->PHY_CTRL |= ZLL_PHY_CTRL_SLOTTED_MASK;
-            }
-            else
-            {
-                ZLL->PHY_CTRL &= ~ZLL_PHY_CTRL_SLOTTED_MASK;
-            }
-            
-            /* Ensure that no spurious interrupts are raised, but do not change TMR1 and TMR4 IRQ status */
-            irqSts = ZLL->IRQSTS;
-            irqSts &= ~(ZLL_IRQSTS_TMR1IRQ_MASK | ZLL_IRQSTS_TMR4IRQ_MASK);
-            irqSts |= ZLL_IRQSTS_TMR3MSK_MASK;
-            ZLL->IRQSTS = irqSts;
-            
-            /* Start the RX sequence */
-            ZLL->PHY_CTRL |= gRX_c ;
-            /* unmask SEQ interrupt */
-            ZLL->PHY_CTRL &= ~ZLL_PHY_CTRL_SEQMSK_MASK;
-
-            // if( (status == gPhySuccess_c) && !mXcvrDisallowSleep )
-            // {
-            //     mXcvrDisallowSleep = 1;
-            //     PWR_DisallowXcvrToSleep();
-            // }
+            ZLL->PHY_CTRL &= ~ZLL_PHY_CTRL_SLOTTED_MASK;
         }
+        
+        /* Ensure that no spurious interrupts are raised, but do not change TMR1 and TMR4 IRQ status */
+        irqSts = ZLL->IRQSTS;
+        irqSts &= ~(ZLL_IRQSTS_TMR1IRQ_MASK | ZLL_IRQSTS_TMR4IRQ_MASK);
+        irqSts |= ZLL_IRQSTS_TMR3MSK_MASK;
+        ZLL->IRQSTS = irqSts;
+        
+        /* Start the RX sequence */
+        ZLL->PHY_CTRL |= gRX_c ;
+        /* unmask SEQ interrupt */
+        ZLL->PHY_CTRL &= ~ZLL_PHY_CTRL_SEQMSK_MASK;
     }
 
     return status;
@@ -725,28 +694,3 @@ phyStatus_t PhyPlmeGetPIBRequest(phyPibId_t pibId, uint64_t * pibValue, uint8_t 
 * Private functions
 *************************************************************************************
 ************************************************************************************/
-
-/*! *********************************************************************************
-* \brief  This function try to restart the Rx
-*
-* \param[in]   param  phy Rx params
-*
-********************************************************************************** */
-#if gPhyRxRetryInterval_c
-static void PhyRxRetry( uint32_t param )
-{
-    phyRxParams_t *pRxParams = &phyLocal.rxParams;
-    phyTime_t absEndTime = pRxParams->timeStamp;
-    absEndTime += pRxParams->duration;
-
-    gRxRetryTimer = gInvalidTimerId_c;
-    if( PhyTime_GetTimestamp() < absEndTime )
-    {
-        PhyPlmeRxRequest( pRxParams->phyRxMode, pRxParams );
-    }
-    else
-    {
-        Radio_Phy_TimeRxTimeoutIndication(param);
-    }
-}
-#endif

@@ -40,7 +40,7 @@
 
 #include "fsl_os_abstraction.h"
 #include "fsl_common.h"
-#include "critical.h" // mbed-os
+#include "mbed_critical.h" // mbed-os
 
 
 /*! *********************************************************************************
