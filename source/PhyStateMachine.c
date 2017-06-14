@@ -87,6 +87,9 @@ static void Phy_SendLatePLME( uint32_t param );
 *************************************************************************************
 ********************************************************************************** */
 Phy_PhyLocalStruct_t phyLocal;
+static pdDataToMacMessage_t rxData;
+static uint8_t pPsdu[127];
+
 //uint8_t mXcvrDisallowSleep = 0;
 const uint8_t gPhyPoolId = gPhyPoolId_d;
 
@@ -107,7 +110,9 @@ void Phy_Init(void)
     PhyTime_TimerInit(NULL);
 
     phyLocal.flags = gPhyFlagDeferTx_c;
-    phyLocal.rxParams.pRxData = NULL;   
+
+    rxData.msgData.dataInd.pPsdu = &pPsdu;
+    phyLocal.rxParams.pRxData = &rxData;   
 
     PhyIsrPassRxParams( NULL );
     PhyPlmeSetPwrState( gPhyDefaultIdlePwrMode_c );
@@ -796,7 +801,7 @@ static void PLME_SendMessage(Phy_PhyLocalStruct_t *pPhyStruct, phyMessageId_t ms
           
         if(NULL == pMsg)
         {
-            pMsg = (plmeToMacMessage_t *)Phy_BufferAllocForever(sizeof(plmeToMacMessage_t));
+            pMsg = (plmeToMacMessage_t *)Phy_BufferAlloc/*Forever*/(sizeof(plmeToMacMessage_t));
         }
               
         pMsg->msgType = msgType;
@@ -819,6 +824,7 @@ static void PLME_SendMessage(Phy_PhyLocalStruct_t *pPhyStruct, phyMessageId_t ms
         }
             
             pPhyStruct->PLME_MAC_SapHandler(pMsg, pPhyStruct->currentMacInstance);
+            //Phy_BufferFree(pMsg);
     }
 }
 
@@ -873,12 +879,13 @@ static void PD_SendMessage(Phy_PhyLocalStruct_t *pPhyStruct, phyMessageId_t msgT
                        
             if(NULL == pMsg)
             {                
-                pMsg = (pdDataToMacMessage_t *)Phy_BufferAllocForever(sizeof(phyMessageHeader_t) + sizeof(pdDataCnf_t));
+                pMsg = (pdDataToMacMessage_t *)Phy_BufferAlloc/*Forever*/(sizeof(phyMessageHeader_t) + sizeof(pdDataCnf_t));
             }
                       
             pMsg->msgType = gPdDataCnf_c;
             pMsg->msgData.dataCnf.status = status;
             pPhyStruct->PD_MAC_SapHandler(pMsg, pPhyStruct->currentMacInstance);
+            //Phy_BufferFree(pMsg);
         }
     }
 }

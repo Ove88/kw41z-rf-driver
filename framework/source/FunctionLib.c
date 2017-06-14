@@ -32,6 +32,7 @@
 */
 
 #include "FunctionLib.h"
+#include "fsl_os_abstraction.h"
 
 #if USING_MBED_NANOSTACK
 #include "nsdynmemLIB.h"
@@ -99,13 +100,13 @@ void FLib_MemCpy (void* pDst,
                   void* pSrc,
                   uint32_t cBytes)
 {
-    
+    OSA_InterruptDisable();
 #if gFLib_CheckBufferOverflow_d && defined(MEM_TRACKING)
     (void)MEM_BufferCheck(pDst, cBytes);
 #endif
     
 #if gUseToolchainMemFunc_d
-    memcpy(pDst, pSrc, cBytes);
+    memcpy((uint8_t*)pDst, (uint8_t*)pSrc, cBytes);
 #else
     while (cBytes)
     {
@@ -115,6 +116,7 @@ void FLib_MemCpy (void* pDst,
         cBytes--;
     }
 #endif
+OSA_InterruptEnable();
 }
 
 
@@ -136,6 +138,7 @@ void FLib_MemSet (void* pData,
                   uint8_t value,
                   uint32_t cBytes)
 {
+
 #if gFLib_CheckBufferOverflow_d && defined(MEM_TRACKING)
     (void)MEM_BufferCheck(pData, cBytes);
 #endif

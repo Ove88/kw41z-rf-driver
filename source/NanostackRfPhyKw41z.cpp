@@ -3,8 +3,6 @@
 */
 
 
-//#include "clang_headers.h" // For completion
-
 #include "ns_types.h"
 #include "arm_hal_interrupt.h"
 #include "arm_hal_phy.h"
@@ -201,11 +199,11 @@ static int8_t rf_interface_state_control(phy_interface_state_e new_state, uint8_
              /* Request idle state */
             retVal = phy_request_idle_state();
            
-            if (retVal == 0)
-            {
-                /* Set radio in low power mode */
-                PhyPlmeSetPwrState(gPhyPwrDSM_c);
-            } 
+            // if (retVal == 0)
+            // {
+            //     /* Set radio in low power mode */
+            //     PhyPlmeSetPwrState(gPhyPwrDSM_c);
+            // } 
            
             break;
 
@@ -519,6 +517,8 @@ void NanostackRfPhyKw41z::set_mac_address(uint8_t *mac)
 
      phy_set_pib_attribute(gPhyPibFrameEnable_c, 1); /* Enable reception of MAC frames */
 
+
+
      return 0;  
  }
 
@@ -667,7 +667,7 @@ static int8_t phy_set_pib_attribute(phyPibId_t attribute, uint64_t value)
 static uint64_t phy_get_pib_attribute(phyPibId_t attribute)
 {
     plmeGetReq_t req;
-    uint64_t value;
+    uint64_t value = 0;
     int8_t retVal;
 
     req.PibAttribute = attribute;
@@ -935,7 +935,7 @@ phyStatus_t phy_data_msg_sap_handler(
         /* Callback to MAC layer with received data */
         device_driver.phy_rx_cb(
             pMsg->msgData.dataInd.pPsdu,                /* Pointer to received data */
-            pMsg->msgData.dataInd.psduLength - 2,       /* Number of bytes received - CRC (FCS field) */
+            pMsg->msgData.dataInd.psduLength,           /* Number of bytes received */
             pMsg->msgData.dataInd.ppduLinkQuality,      /* Received LQI (link quality) */
             PhyConvertLQIToRSSI(
                 pMsg->msgData.dataInd.ppduLinkQuality), /* RSSI in dB */
